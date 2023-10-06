@@ -79,7 +79,7 @@ def resize_labels(labels, size):
         label = label.float().numpy()
         label = Image.fromarray(label).resize(size, resample=Image.NEAREST)
         new_labels.append(np.asarray(label))
-    new_labels = torch.LongTensor(new_labels)
+    new_labels = torch.LongTensor(np.asarray(new_labels).astype("int64"))
     return new_labels
 
 
@@ -104,9 +104,7 @@ def main(ctx):
     "--cuda/--cpu", default=True, help="Enable CUDA if available [default: --cuda]"
 )
 def train(config_path, cuda):
-    """
-    Training DeepLab by v2 protocol
-    """
+    print("Training DeepLab by v2 protocol")
 
     # Configuration
     CONFIG = OmegaConf.load(config_path)
@@ -201,7 +199,7 @@ def train(config_path, cuda):
         CONFIG.DATASET.SPLIT.TRAIN,
     )
     makedirs(checkpoint_dir)
-    print("Checkpoint dst:", checkpoint_dir)
+    print("Checkpoint dst:", checkpoint_dir, flush=True)
 
     # Freeze the batch norm pre-trained on COCO
     model.train()
@@ -251,7 +249,9 @@ def train(config_path, cuda):
 
         # TensorBoard
         if iteration % CONFIG.SOLVER.ITER_TB == 0:
-            writer.add_scalar("loss/train", average_loss.value()[0], iteration)
+            _average_loss = average_loss.value()[0]
+            writer.add_scalar("loss/train", _average_loss, iteration)
+            print(f"step={iteration} loss={_average_loss}")
             for i, o in enumerate(optimizer.param_groups):
                 writer.add_scalar("lr/group_{}".format(i), o["lr"], iteration)
             for i in range(torch.cuda.device_count()):
@@ -302,9 +302,7 @@ def train(config_path, cuda):
     "--cuda/--cpu", default=True, help="Enable CUDA if available [default: --cuda]"
 )
 def test(config_path, model_path, cuda):
-    """
-    Evaluation on validation set
-    """
+    print("Evaluation on validation set")
 
     # Configuration
     CONFIG = OmegaConf.load(config_path)
@@ -359,12 +357,10 @@ def test(config_path, model_path, cuda):
     )
     makedirs(save_dir)
     save_path = os.path.join(save_dir, "scores.json")
-    print("Score dst:", save_path)
+    print("Score dst:", save_path, flush=True)
 
     preds, gts = [], []
-    for image_ids, images, gt_labels in tqdm(
-        loader, total=len(loader), dynamic_ncols=True
-    ):
+    for image_ids, images, gt_labels in tqdm(loader):
         # Image
         images = images.to(device)
 
@@ -411,9 +407,7 @@ def test(config_path, model_path, cuda):
     help="Number of parallel jobs",
 )
 def crf(config_path, n_jobs):
-    """
-    CRF post-processing on pre-computed logits
-    """
+    print("CRF post-processing on pre-computed logits")
 
     # Configuration
     CONFIG = OmegaConf.load(config_path)
@@ -464,7 +458,7 @@ def crf(config_path, n_jobs):
     )
     makedirs(save_dir)
     save_path = os.path.join(save_dir, "scores_crf.json")
-    print("Score dst:", save_path)
+    print("Score dst:", save_path, flush=True)
 
     # Process per sample
     def process(i):
