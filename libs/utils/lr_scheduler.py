@@ -6,10 +6,10 @@
 # Date:   09 January 2019
 
 
-from torch.optim.lr_scheduler import _LRScheduler
+from torch.optim.lr_scheduler import LRScheduler
 
 
-class PolynomialLR(_LRScheduler):
+class PolynomialLR(LRScheduler):
     def __init__(self, optimizer, step_size, iter_max, power, last_epoch=-1):
         self.step_size = step_size
         self.iter_max = iter_max

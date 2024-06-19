@@ -114,3 +114,9 @@ exps/
 *_v3plus.py
 *.json
 *.zip
+
+JPEGImages
+SegmentationClass
+SegmentationClassAug
+ImageSets
+logs/

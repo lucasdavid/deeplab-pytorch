@@ -210,7 +210,6 @@ def train(config_path, cuda):
         total=CONFIG.SOLVER.ITER_MAX,
         dynamic_ncols=True,
     ):
-
         # Clear gradients (ready to accumulate)
         optimizer.zero_grad()
 
@@ -231,7 +230,7 @@ def train(config_path, cuda):
                 # Resize labels for {100%, 75%, 50%, Max} logits
                 _, _, H, W = logit.shape
                 labels_ = resize_labels(labels, size=(H, W))
-                iter_loss += criterion(logit, labels_.to(device))
+                iter_loss += criterion(logit, labels_.to(device)).clamp(max=10.)
 
             # Propagate backward (just compute gradients)
             iter_loss /= CONFIG.SOLVER.ITER_SIZE
@@ -360,7 +359,7 @@ def test(config_path, model_path, cuda):
     print("Score dst:", save_path, flush=True)
 
     preds, gts = [], []
-    for image_ids, images, gt_labels in tqdm(loader):
+    for image_ids, images, gt_labels in tqdm(loader, ncols=160):
         # Image
         images = images.to(device)
 
