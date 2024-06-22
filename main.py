@@ -10,6 +10,7 @@ from __future__ import absolute_import, division, print_function
 import json
 import multiprocessing
 import os
+import sys
 
 import click
 import joblib
@@ -359,28 +360,37 @@ def test(config_path, model_path, cuda):
     print("Score dst:", save_path, flush=True)
 
     preds, gts = [], []
-    for image_ids, images, gt_labels in tqdm(loader, ncols=160):
-        # Image
-        images = images.to(device)
+    try:
+        for image_ids, images, gt_labels in tqdm(loader, ncols=160):
+            filenames = [os.path.join(logit_dir, image_id + ".npy") for image_id in image_ids]
 
-        # Forward propagation
-        logits = model(images)
+            if all(map(os.path.exists, filenames)):
+                logits = [torch.from_numpy(np.load(f)) for f in filenames]
+                logits = torch.stack(logits, 0)
+            else:
+                # Image
+                images = images.to(device)
 
-        # Save on disk for CRF post-processing
-        for image_id, logit in zip(image_ids, logits):
-            filename = os.path.join(logit_dir, image_id + ".npy")
-            np.save(filename, logit.cpu().numpy())
+                # Forward propagation
+                logits = model(images)
 
-        # Pixel-wise labeling
-        _, H, W = gt_labels.shape
-        logits = F.interpolate(
-            logits, size=(H, W), mode="bilinear", align_corners=False
-        )
-        probs = F.softmax(logits, dim=1)
-        labels = torch.argmax(probs, dim=1)
+                # Save on disk for CRF post-processing
+                for image_id, logit in zip(image_ids, logits):
+                    filename = os.path.join(logit_dir, image_id + ".npy")
+                    np.save(filename, logit.cpu().numpy())
 
-        preds += list(labels.cpu().numpy())
-        gts += list(gt_labels.numpy())
+            # Pixel-wise labeling
+            _, H, W = gt_labels.shape
+            logits = F.interpolate(
+                logits, size=(H, W), mode="bilinear", align_corners=False
+            )
+            # probs = F.softmax(logits, dim=1)
+            labels = torch.argmax(logits, dim=1)
+
+            preds += list(labels.cpu().numpy())
+            gts += list(gt_labels.numpy())
+    except Exception as error:
+        print(f"[Exception raised] {error}. Interrupting inference.", file=sys.stderr)
 
     # Pixel Accuracy, Mean Accuracy, Class IoU, Mean IoU, Freq Weighted IoU
     score = scores(gts, preds, n_class=CONFIG.DATASET.N_CLASSES)
@@ -464,7 +474,11 @@ def crf(config_path, n_jobs):
         image_id, image, gt_label = dataset.__getitem__(i)
 
         filename = os.path.join(logit_dir, image_id + ".npy")
-        logit = np.load(filename)
+        try:
+            logit = np.load(filename)
+        except FileNotFoundError:
+            print(f"File '{filename}' not found.", file=sys.stderr)
+            return None, None
 
         _, H, W = image.shape
         logit = torch.FloatTensor(logit)[None, ...]
@@ -483,6 +497,8 @@ def crf(config_path, n_jobs):
     )
 
     preds, gts = zip(*results)
+    preds = (p for p in preds if p is not None)
+    gts = (p for p in gts if p is not None)
 
     # Pixel Accuracy, Mean Accuracy, Class IoU, Mean IoU, Freq Weighted IoU
     score = scores(gts, preds, n_class=CONFIG.DATASET.N_CLASSES)
